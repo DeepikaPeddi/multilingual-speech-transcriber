@@ -1,49 +1,56 @@
-import gradio as gr
+from transformers import pipeline
 import torchaudio
 import torch
-from transformers import pipeline
+import gradio as gr
+import os
+from pydub import AudioSegment
+import tempfile
 
-# Loads multilingual Wav2Vec2 model with built-in tokenizer
-asr = pipeline(
-    "automatic-speech-recognition",
-    model="jonatasgrosman/wav2vec2-large-xlsr-53-multilingual",
-    tokenizer="jonatasgrosman/wav2vec2-large-xlsr-53-multilingual"
-)
+# Load Whisper ASR pipeline 
+asr = pipeline("automatic-speech-recognition", model="openai/whisper-medium", device=0 if torch.cuda.is_available() else -1)
 
-# Split audio into chunks with max duration 30-seconds
-def chunk_audio(audio, sample_rate, max_duration=30):
-    max_length = int(sample_rate * max_duration)
-    return [audio[i:i+max_length] for i in range(0, len(audio), max_length)]
+#  convert audio to WAV format
+def convert_to_wav(input_file):
+    audio = AudioSegment.from_file(input_file)
+    audio = audio.set_frame_rate(16000).set_channels(1)
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    audio.export(temp_file.name, format="wav")
+    return temp_file.name
 
-# Transcription function
-def transcribe(audio_file):
-    waveform, sample_rate = torchaudio.load(audio_file)
-    waveform = waveform.mean(dim=0).numpy()  # Convert to 1D numpy array
-
-    if len(waveform) < sample_rate * 30:
-        res = asr(waveform)
-        return res["text"]
-
-    chunks = chunk_audio(waveform, sample_rate)
-    full_transcription = ""
-
+#  split audio into 30-second chunks
+def chunk_audio(file_path, chunk_length_ms=30000):
+    audio = AudioSegment.from_wav(file_path)
+    chunks = [audio[i:i+chunk_length_ms] for i in range(0, len(audio), chunk_length_ms)]
+    temp_files = []
     for i, chunk in enumerate(chunks):
-        try:
-            res = asr(chunk)
-            full_transcription += res["text"] + " "
-        except Exception as e:
-            full_transcription += f"\n[Error in chunk {i}: {e}]\n"
+        temp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+        chunk.export(temp.name, format="wav")
+        temp_files.append(temp.name)
+    return temp_files
 
-    return full_transcription.strip()
+# Transcription logic
+def transcribe(audio_path):
+    try:
+        converted_path = convert_to_wav(audio_path)
+        chunk_files = chunk_audio(converted_path)
+        full_text = ""
+        for chunk in chunk_files:
+            text = asr(chunk)["text"]
+            full_text += text + " "
+            os.remove(chunk)  # Clean up chunk
+        os.remove(converted_path)
+        return full_text.strip()
+    except Exception as e:
+        return f"Error during transcription: {e}"
 
-# Gradio UI
-interface = gr.Interface(
+# Gradio Interface
+demo = gr.Interface(
     fn=transcribe,
-    inputs=gr.Audio(type="filepath", label="Upload Audio (.wav, .mp3, .ogg, etc.)"),
-    outputs="text",
-    title="Multilingual Speech Transcriber",
-    description=" Upload an audio file of any language , audio file can be of any format.",
+    inputs=gr.Audio(type="filepath", label="Upload Audio (WAV, MP3, OGG, etc.)"),
+    outputs=gr.Textbox(label="Transcribed Text"),
+    title="Multilingual Audio Transcriber",
+    description="Upload audio in any language and format.",
     allow_flagging="never"
 )
 
-interface.launch()
+demo.launch()
