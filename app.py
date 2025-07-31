@@ -1,49 +1,49 @@
 import gradio as gr
-import librosa
-import numpy as np
+import torchaudio
+import torch
 from transformers import pipeline
 
-# this line of code loads multilingual asr model 
-asr = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-large-xlsr-53", tokenizer="facebook/wav2vec2-large-xlsr-53")
+# Loads multilingual Wav2Vec2 model with built-in tokenizer
+asr = pipeline(
+    "automatic-speech-recognition",
+    model="jonatasgrosman/wav2vec2-large-xlsr-53-multilingual",
+    tokenizer="jonatasgrosman/wav2vec2-large-xlsr-53-multilingual"
+)
 
-# split audio into max 30 seconds chunks
-def chunk_audio(audio, rate, max_duration=30):
-    max_len = int(rate * max_duration)
-    chunks = []
-    for i in range(0, len(audio), max_len):
-        chunks.append(audio[i:i + max_len])
-    return chunks
+# Split audio into chunks with max duration 30-seconds
+def chunk_audio(audio, sample_rate, max_duration=30):
+    max_length = int(sample_rate * max_duration)
+    return [audio[i:i+max_length] for i in range(0, len(audio), max_length)]
 
 # Transcription function
 def transcribe(audio_file):
-    #loads audio
-    audio, rate = librosa.load(audio_file, sr=16000)
-    
-    # If audio <30 seconds then transcribes directly
-    if len(audio) < rate * 30:
-        res = asr(audio)
+    waveform, sample_rate = torchaudio.load(audio_file)
+    waveform = waveform.mean(dim=0).numpy()  # Convert to 1D numpy array
+
+    if len(waveform) < sample_rate * 30:
+        res = asr(waveform)
         return res["text"]
-    
-    # if audio>30bseconds , splits into chunks
-    chunks = chunk_audio(audio, rate)
-    full_text = ""
-    for idx, chunk in enumerate(chunks):
+
+    chunks = chunk_audio(waveform, sample_rate)
+    full_transcription = ""
+
+    for i, chunk in enumerate(chunks):
         try:
             res = asr(chunk)
-            full_text += res["text"] + " "
+            full_transcription += res["text"] + " "
         except Exception as e:
-            full_text += f"\n[Error in chunk {idx}: {e}]\n"
-    
-    return full_text.strip()
+            full_transcription += f"\n[Error in chunk {i}: {e}]\n"
 
-# Gradio interface to deploy in hugging face
+    return full_transcription.strip()
+
+# Gradio UI
 interface = gr.Interface(
     fn=transcribe,
     inputs=gr.Audio(type="filepath", label="Upload Audio (.wav, .mp3, .ogg, etc.)"),
     outputs="text",
-    title="Advanced Speech-to-Text Transcriber",
+    title="Multilingual Speech Transcriber",
     description=" Upload an audio file of any language , audio file can be of any format."
+    allow_flagging="never"
 )
 
-# Launch the app
 interface.launch()
