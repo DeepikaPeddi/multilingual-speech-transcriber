@@ -1,6 +1,6 @@
 transformers
 gradio
-torchaudio
+librosa
 torch
-
-
+torchaudio
+soundfile
