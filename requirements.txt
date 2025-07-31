@@ -1,6 +1,7 @@
-transformers
-gradio
-librosa
-torch
-torchaudio
-soundfile
+transformers==4.41.1
+gradio==4.31.2
+librosa==0.10.1
+torchaudio==2.2.2
+torch==2.2.2
+soundfile==0.12.1
+numpy==1.26.4
