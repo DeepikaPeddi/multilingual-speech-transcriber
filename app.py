@@ -42,7 +42,7 @@ interface = gr.Interface(
     inputs=gr.Audio(type="filepath", label="Upload Audio (.wav, .mp3, .ogg, etc.)"),
     outputs="text",
     title="Multilingual Speech Transcriber",
-    description=" Upload an audio file of any language , audio file can be of any format."
+    description=" Upload an audio file of any language , audio file can be of any format.",
     allow_flagging="never"
 )
 
