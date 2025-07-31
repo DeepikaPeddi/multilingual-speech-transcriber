@@ -1,0 +1,5 @@
+transformers
+gradio
+librosa
+torch
+soundfile
